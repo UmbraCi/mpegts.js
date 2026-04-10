@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mpegts.js Dual Playback Test</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 20px;
+    }
+    h1 { margin: 0 0 16px; font-size: 20px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 12px;
+    }
+    video {
+      width: 100%;
+      background: #000;
+      border-radius: 8px;
+    }
+    .status {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #93c5fd;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>dist/mpegts.js 双视频播放验证</h1>
+  <div class="grid">
+    <section class="card">
+      <div>input.flv（有音频）</div>
+      <video id="video-audio" controls muted playsinline></video>
+      <div id="status-audio" class="status">初始化中...</div>
+    </section>
+    <section class="card">
+      <div>no-audio.flv（无音频）</div>
+      <video id="video-no-audio" controls muted playsinline></video>
+      <div id="status-no-audio" class="status">初始化中...</div>
+    </section>
+  </div>
+
+  <script src="../dist/mpegts.js"></script>
+  <script>
+    function bindPlayer(videoId, statusId, url) {
+      const video = document.getElementById(videoId);
+      const status = document.getElementById(statusId);
+      const lines = [];
+      const log = (msg) => {
+        lines.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+        status.textContent = lines.slice(-8).join('\n');
+      };
+
+      if (!window.mpegts || !mpegts.isSupported()) {
+        log('mpegts.js 不可用或当前浏览器不支持 MSE');
+        return null;
+      }
+
+      const player = mpegts.createPlayer({ type: 'flv', url, isLive: false }, {
+        enableWorker: false,
+        lazyLoad: false,
+        stashInitialSize: 128
+      });
+
+      player.attachMediaElement(video);
+      player.load();
+      video.play().then(() => log(`play() 成功: ${url}`)).catch((e) => log(`play() 拒绝: ${e.message}`));
+
+      player.on(mpegts.Events.ERROR, (type, detail, info) => {
+        log(`ERROR: ${type}, ${detail}, ${JSON.stringify(info || {})}`);
+      });
+      player.on(mpegts.Events.MEDIA_INFO, (info) => {
+        log(`MEDIA_INFO: hasAudio=${info.hasAudio}, hasVideo=${info.hasVideo}`);
+      });
+      player.on(mpegts.Events.STATISTICS_INFO, (info) => {
+        log(`STAT: decoded=${info.decodedFrames || 0}, dropped=${info.droppedFrames || 0}, speed=${info.speed || 0}`);
+      });
+
+      return { player, video, status, log };
+    }
+
+    const p1 = bindPlayer('video-audio', 'status-audio', './input.flv');
+    const p2 = bindPlayer('video-no-audio', 'status-no-audio', './no-audio.flv');
+
+    window.__dualPlayers = { p1, p2 };
+  </script>
+</body>
+</html>
+
